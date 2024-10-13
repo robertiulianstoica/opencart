@@ -1,86 +1,87 @@
 <?php
-class ControllerAccountTransaction extends Controller {
-	public function index() {
-		if (!$this->customer->isLogged()) {
-			$this->session->data['redirect'] = $this->url->link('account/transaction', '', 'SSL');
+namespace Opencart\Catalog\Controller\Account;
+/**
+ * Class Transaction
+ *
+ * @package Opencart\Catalog\Controller\Account
+ */
+class Transaction extends \Opencart\System\Engine\Controller {
+	/**
+	 * @return void
+	 */
+	public function index(): void {
+		$this->load->language('account/transaction');
 
-			$this->response->redirect($this->url->link('account/login', '', 'SSL'));
+		if (isset($this->request->get['page'])) {
+			$page = (int)$this->request->get['page'];
+		} else {
+			$page = 1;
 		}
 
-		$this->load->language('account/transaction');
+		if (!$this->customer->isLogged() || (!isset($this->request->get['customer_token']) || !isset($this->session->data['customer_token']) || ($this->request->get['customer_token'] != $this->session->data['customer_token']))) {
+			$this->session->data['redirect'] = $this->url->link('account/transaction', 'language=' . $this->config->get('config_language'));
+
+			$this->response->redirect($this->url->link('account/login', 'language=' . $this->config->get('config_language'), true));
+		}
 
 		$this->document->setTitle($this->language->get('heading_title'));
 
-		$data['breadcrumbs'] = array();
+		$data['breadcrumbs'] = [];
 
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('text_home'),
-			'href' => $this->url->link('common/home')
-		);
+			'href' => $this->url->link('common/home', 'language=' . $this->config->get('config_language'))
+		];
 
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('text_account'),
-			'href' => $this->url->link('account/account', '', 'SSL')
-		);
+			'href' => $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'])
+		];
 
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('text_transaction'),
-			'href' => $this->url->link('account/transaction', '', 'SSL')
-		);
+			'href' => $this->url->link('account/transaction', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'])
+		];
+
+		$data['column_amount'] = sprintf($this->language->get('column_amount'), $this->config->get('config_currency'));
+
+		$limit = 10;
+
+		$data['transactions'] = [];
+
+		$filter_data = [
+			'sort'  => 'date_added',
+			'order' => 'DESC',
+			'start' => ($page - 1) * $limit,
+			'limit' => $limit
+		];
 
 		$this->load->model('account/transaction');
 
-		$data['heading_title'] = $this->language->get('heading_title');
-
-		$data['column_date_added'] = $this->language->get('column_date_added');
-		$data['column_description'] = $this->language->get('column_description');
-		$data['column_amount'] = sprintf($this->language->get('column_amount'), $this->config->get('config_currency'));
-
-		$data['text_total'] = $this->language->get('text_total');
-		$data['text_empty'] = $this->language->get('text_empty');
-
-		$data['button_continue'] = $this->language->get('button_continue');
-
-		if (isset($this->request->get['page'])) {
-			$page = $this->request->get['page'];
-		} else {
-			$page = 1;
-		}		
-
-		$data['transactions'] = array();
-
-		$filter_data = array(				  
-			'sort'  => 'date_added',
-			'order' => 'DESC',
-			'start' => ($page - 1) * 10,
-			'limit' => 10
-		);
-
-		$transaction_total = $this->model_account_transaction->getTotalTransactions();
-
-		$results = $this->model_account_transaction->getTransactions($filter_data);
+		$results = $this->model_account_transaction->getTransactions($this->customer->getId(), $filter_data);
 
 		foreach ($results as $result) {
-			$data['transactions'][] = array(
+			$data['transactions'][] = [
 				'amount'      => $this->currency->format($result['amount'], $this->config->get('config_currency')),
 				'description' => $result['description'],
 				'date_added'  => date($this->language->get('date_format_short'), strtotime($result['date_added']))
-			);
-		}	
+			];
+		}
 
-		$pagination = new Pagination();
-		$pagination->total = $transaction_total;
-		$pagination->page = $page;
-		$pagination->limit = 10; 
-		$pagination->url = $this->url->link('account/transaction', 'page={page}', 'SSL');
+		$transaction_total = $this->model_account_transaction->getTotalTransactions($this->customer->getId());
 
-		$data['pagination'] = $pagination->render();
+		$data['pagination'] = $this->load->controller('common/pagination', [
+			'total' => $transaction_total,
+			'page'  => $page,
+			'limit' => $limit,
+			'url'   => $this->url->link('account/transaction', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&page={page}')
+		]);
 
-		$data['results'] = sprintf($this->language->get('text_pagination'), ($transaction_total) ? (($page - 1) * 10) + 1 : 0, ((($page - 1) * 10) > ($transaction_total - 10)) ? $transaction_total : ((($page - 1) * 10) + 10), $transaction_total, ceil($transaction_total / 10));
+		$data['results'] = sprintf($this->language->get('text_pagination'), ($transaction_total) ? (($page - 1) * $limit) + 1 : 0, ((($page - 1) * $limit) > ($transaction_total - $limit)) ? $transaction_total : ((($page - 1) * $limit) + $limit), $transaction_total, ceil($transaction_total / $limit));
 
-		$data['total'] = $this->currency->format($this->customer->getBalance());
+		$data['total'] = $this->currency->format($this->customer->getBalance(), $this->session->data['currency']);
 
-		$data['continue'] = $this->url->link('account/account', '', 'SSL');
+		$data['continue'] = $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token']);
 
 		$data['column_left'] = $this->load->controller('common/column_left');
 		$data['column_right'] = $this->load->controller('common/column_right');
@@ -89,10 +90,6 @@ class ControllerAccountTransaction extends Controller {
 		$data['footer'] = $this->load->controller('common/footer');
 		$data['header'] = $this->load->controller('common/header');
 
-		if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/account/transaction.tpl')) {
-			$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/account/transaction.tpl', $data));
-		} else {
-			$this->response->setOutput($this->load->view('default/template/account/transaction.tpl', $data));
-		}	
-	} 		
+		$this->response->setOutput($this->load->view('account/transaction', $data));
+	}
 }

@@ -1,43 +1,66 @@
 <?php
-class ModelToolImage extends Model {
-	public function resize($filename, $width, $height) {
-		if (!is_file(DIR_IMAGE . $filename)) {
-			return;
-		} 
-		
+namespace Opencart\Admin\Model\Tool;
+/**
+ * Class Image
+ *
+ * @package Opencart\Admin\Model\Tool
+ */
+class Image extends \Opencart\System\Engine\Model {
+	/**
+	 * Resize
+	 *
+	 * @param string $filename
+	 * @param int    $width
+	 * @param int    $height
+	 *
+	 * @throws \Exception
+	 *
+	 * @return string
+	 */
+	public function resize(string $filename, int $width, int $height): string {
+		$filename = html_entity_decode($filename, ENT_QUOTES, 'UTF-8');
+
+		if (!is_file(DIR_IMAGE . $filename) || substr(str_replace('\\', '/', realpath(DIR_IMAGE . $filename)), 0, strlen(DIR_IMAGE)) != DIR_IMAGE) {
+			return '';
+		}
+
 		$extension = pathinfo($filename, PATHINFO_EXTENSION);
-		
-		$old_image = $filename;
-		$new_image = 'cache/' . utf8_substr($filename, 0, utf8_strrpos($filename, '.')) . '-' . $width . 'x' . $height . '.' . $extension;
-		
-		if (!is_file(DIR_IMAGE . $new_image) || (filectime(DIR_IMAGE . $old_image) > filectime(DIR_IMAGE . $new_image))) {
+
+		$image_old = $filename;
+		$image_new = 'cache/' . oc_substr($filename, 0, oc_strrpos($filename, '.')) . '-' . $width . 'x' . $height . '.' . $extension;
+
+		if (!is_file(DIR_IMAGE . $image_new) || (filemtime(DIR_IMAGE . $image_old) > filemtime(DIR_IMAGE . $image_new))) {
+			[$width_orig, $height_orig, $image_type] = getimagesize(DIR_IMAGE . $image_old);
+
+			if (!in_array($image_type, [IMAGETYPE_PNG, IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_WEBP])) {
+				return HTTP_CATALOG . 'image/' . $image_old;
+			}
+
 			$path = '';
-			
-			$directories = explode('/', dirname(str_replace('../', '', $new_image)));
-			
+
+			$directories = explode('/', dirname($image_new));
+
 			foreach ($directories as $directory) {
-				$path = $path . '/' . $directory;
-				
+				if (!$path) {
+					$path = $directory;
+				} else {
+					$path = $path . '/' . $directory;
+				}
+
 				if (!is_dir(DIR_IMAGE . $path)) {
 					@mkdir(DIR_IMAGE . $path, 0777);
 				}
 			}
-			
-			list($width_orig, $height_orig) = getimagesize(DIR_IMAGE . $old_image);
 
-			if ($width_orig != $width || $height_orig != $height) {			
-				$image = new Image(DIR_IMAGE . $old_image);
+			if ($width_orig != $width || $height_orig != $height) {
+				$image = new \Opencart\System\Library\Image(DIR_IMAGE . $image_old);
 				$image->resize($width, $height);
-				$image->save(DIR_IMAGE . $new_image);
+				$image->save(DIR_IMAGE . $image_new);
 			} else {
-				copy(DIR_IMAGE . $old_image, DIR_IMAGE . $new_image);
+				copy(DIR_IMAGE . $image_old, DIR_IMAGE . $image_new);
 			}
 		}
-	
-		if ($this->request->server['HTTPS']) {
-			return HTTPS_CATALOG . 'image/' . $new_image;
-		} else {
-			return HTTP_CATALOG . 'image/' . $new_image;
-		}	
+
+		return HTTP_CATALOG . 'image/' . $image_new;
 	}
 }

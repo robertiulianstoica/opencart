@@ -1,149 +1,89 @@
-<?php 
-class ControllerInformationContact extends Controller {
-	private $error = array(); 
-
-	public function index() {
+<?php
+namespace Opencart\Catalog\Controller\Information;
+/**
+ * Class Contact
+ *
+ * @package Opencart\Catalog\Controller\Information
+ */
+class Contact extends \Opencart\System\Engine\Controller {
+	/**
+	 * @return void
+	 */
+	public function index(): void {
 		$this->load->language('information/contact');
 
 		$this->document->setTitle($this->language->get('heading_title'));
 
-		if (($this->request->server['REQUEST_METHOD'] == 'POST') && $this->validate()) {
-			$mail = new Mail($this->config->get('config_mail'));		
-			$mail->setTo($this->config->get('config_email'));
-			$mail->setFrom($this->request->post['email']);
-			$mail->setSender($this->request->post['name']);
-			$mail->setSubject(sprintf($this->language->get('email_subject'), $this->request->post['name']));
-			$mail->setText(strip_tags($this->request->post['enquiry']));
-			$mail->send();
+		$data['breadcrumbs'] = [];
 
-			$this->response->redirect($this->url->link('information/contact/success'));
-		}
-
-		$data['breadcrumbs'] = array();
-
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('text_home'),
-			'href' => $this->url->link('common/home')
-		);
+			'href' => $this->url->link('common/home', 'language=' . $this->config->get('config_language'))
+		];
 
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('heading_title'),
-			'href' => $this->url->link('information/contact')
-		);
+			'href' => $this->url->link('information/contact', 'language=' . $this->config->get('config_language'))
+		];
 
-		$data['heading_title'] = $this->language->get('heading_title');
-
-		$data['text_location'] = $this->language->get('text_location');
-		$data['text_store'] = $this->language->get('text_store');
-		$data['text_contact'] = $this->language->get('text_contact');
-		$data['text_address'] = $this->language->get('text_address');
-		$data['text_telephone'] = $this->language->get('text_telephone');
-		$data['text_fax'] = $this->language->get('text_fax');
-		$data['text_open'] = $this->language->get('text_open');
-		$data['text_comment'] = $this->language->get('text_comment');
-
-		$data['entry_name'] = $this->language->get('entry_name');
-		$data['entry_email'] = $this->language->get('entry_email');
-		$data['entry_enquiry'] = $this->language->get('entry_enquiry');
-		$data['entry_captcha'] = $this->language->get('entry_captcha');
-
-		$data['button_map'] = $this->language->get('button_map');
-
-		if (isset($this->error['name'])) {
-			$data['error_name'] = $this->error['name'];
-		} else {
-			$data['error_name'] = '';
-		}
-
-		if (isset($this->error['email'])) {
-			$data['error_email'] = $this->error['email'];
-		} else {
-			$data['error_email'] = '';
-		}		
-
-		if (isset($this->error['enquiry'])) {
-			$data['error_enquiry'] = $this->error['enquiry'];
-		} else {
-			$data['error_enquiry'] = '';
-		}		
-
-		if (isset($this->error['captcha'])) {
-			$data['error_captcha'] = $this->error['captcha'];
-		} else {
-			$data['error_captcha'] = '';
-		}	
-
-		$data['button_continue'] = $this->language->get('button_continue');
-
-		$data['action'] = $this->url->link('information/contact');
+		$data['send'] = $this->url->link('information/contact.send', 'language=' . $this->config->get('config_language'));
 
 		$this->load->model('tool/image');
 
-		if ($this->config->get('config_image')) {
+		if ($this->config->get('config_image') && is_file(DIR_IMAGE . html_entity_decode($this->config->get('config_image'), ENT_QUOTES, 'UTF-8'))) {
 			$data['image'] = $this->model_tool_image->resize($this->config->get('config_image'), $this->config->get('config_image_location_width'), $this->config->get('config_image_location_height'));
 		} else {
-			$data['image'] = false;
-		}		
+			$data['image'] = '';
+		}
 
 		$data['store'] = $this->config->get('config_name');
 		$data['address'] = nl2br($this->config->get('config_address'));
 		$data['geocode'] = $this->config->get('config_geocode');
+		$data['geocode_hl'] = $this->config->get('config_language');
 		$data['telephone'] = $this->config->get('config_telephone');
-		$data['fax'] = $this->config->get('config_fax');
-		$data['open'] = $this->config->get('config_open');
-		$data['comment'] = $this->config->get('config_comment');
+		$data['open'] = nl2br($this->config->get('config_open'));
+		$data['comment'] = nl2br($this->config->get('config_comment'));
 
-		$data['locations'] = array();
+		$data['locations'] = [];
 
 		$this->load->model('localisation/location');
 
-		foreach((array)$this->config->get('config_location') as $location_id) {
-			$location_info = $this->model_localisation_location->getLocation($location_id);
+		foreach ((array)$this->config->get('config_location') as $location_id) {
+			$location_info = $this->model_localisation_location->getLocation((int)$location_id);
 
 			if ($location_info) {
-				if ($location_info['image']) {
+				if ($location_info['image'] && is_file(DIR_IMAGE . html_entity_decode($location_info['image'], ENT_QUOTES, 'UTF-8'))) {
 					$image = $this->model_tool_image->resize($location_info['image'], $this->config->get('config_image_location_width'), $this->config->get('config_image_location_height'));
 				} else {
-					$image = false;
+					$image = '';
 				}
 
-				$data['locations'][] = array(
+				$data['locations'][] = [
 					'location_id' => $location_info['location_id'],
 					'name'        => $location_info['name'],
 					'address'     => nl2br($location_info['address']),
 					'geocode'     => $location_info['geocode'],
 					'telephone'   => $location_info['telephone'],
-					'fax'         => $location_info['fax'],
-					'image'       => $image,  
-					'open'        => $location_info['open'],   
-					'comment'     => $location_info['comment']   
-				);
+					'image'       => $image,
+					'open'        => nl2br($location_info['open']),
+					'comment'     => $location_info['comment']
+				];
 			}
 		}
 
-		if (isset($this->request->post['name'])) {
-			$data['name'] = $this->request->post['name'];
-		} else {
-			$data['name'] = $this->customer->getFirstName();
-		}
+		$data['name'] = $this->customer->getFirstName();
+		$data['email'] = $this->customer->getEmail();
 
-		if (isset($this->request->post['email'])) {
-			$data['email'] = $this->request->post['email'];
-		} else {
-			$data['email'] = $this->customer->getEmail();
-		}
+		// Captcha
+		$this->load->model('setting/extension');
 
-		if (isset($this->request->post['enquiry'])) {
-			$data['enquiry'] = $this->request->post['enquiry'];
-		} else {
-			$data['enquiry'] = '';
-		}
+		$extension_info = $this->model_setting_extension->getExtensionByCode('captcha', $this->config->get('config_captcha'));
 
-		if (isset($this->request->post['captcha'])) {
-			$data['captcha'] = $this->request->post['captcha'];
+		if ($extension_info && $this->config->get('captcha_' . $this->config->get('config_captcha') . '_status') && in_array('contact', (array)$this->config->get('config_captcha_page'))) {
+			$data['captcha'] = $this->load->controller('extension/' . $extension_info['extension'] . '/captcha/' . $extension_info['code']);
 		} else {
 			$data['captcha'] = '';
-		}		
+		}
 
 		$data['column_left'] = $this->load->controller('common/column_left');
 		$data['column_right'] = $this->load->controller('common/column_right');
@@ -152,37 +92,112 @@ class ControllerInformationContact extends Controller {
 		$data['footer'] = $this->load->controller('common/footer');
 		$data['header'] = $this->load->controller('common/header');
 
-		if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/information/contact.tpl')) {
-			$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/information/contact.tpl', $data));
-		} else {
-			$this->response->setOutput($this->load->view('default/template/information/contact.tpl', $data));
-		}		
+		$this->response->setOutput($this->load->view('information/contact', $data));
 	}
 
-	public function success() {
+	/**
+	 * Send
+	 *
+	 * @throws \Exception
+	 *
+	 * @return void
+	 */
+	public function send(): void {
 		$this->load->language('information/contact');
 
-		$this->document->setTitle($this->language->get('heading_title')); 
+		$json = [];
 
-		$data['breadcrumbs'] = array();
+		$keys = [
+			'name',
+			'email',
+			'enquiry'
+		];
 
-		$data['breadcrumbs'][] = array(
+		foreach ($keys as $key) {
+			if (!isset($this->request->post[$key])) {
+				$this->request->post[$key] = '';
+			}
+		}
+
+		if (!oc_validate_length($this->request->post['name'], 3, 32)) {
+			$json['error']['name'] = $this->language->get('error_name');
+		}
+
+		if (!oc_validate_email($this->request->post['email'])) {
+			$json['error']['email'] = $this->language->get('error_email');
+		}
+
+		if (!oc_validate_length($this->request->post['enquiry'], 10, 3000)) {
+			$json['error']['enquiry'] = $this->language->get('error_enquiry');
+		}
+
+		// Captcha
+		$this->load->model('setting/extension');
+
+		$extension_info = $this->model_setting_extension->getExtensionByCode('captcha', $this->config->get('config_captcha'));
+
+		if ($extension_info && $this->config->get('captcha_' . $this->config->get('config_captcha') . '_status') && in_array('contact', (array)$this->config->get('config_captcha_page'))) {
+			$captcha = $this->load->controller('extension/' . $extension_info['extension'] . '/captcha/' . $extension_info['code'] . '.validate');
+
+			if ($captcha) {
+				$json['error']['captcha'] = $captcha;
+			}
+		}
+
+		if (!$json) {
+			if ($this->config->get('config_mail_engine')) {
+				$mail_option = [
+					'parameter'     => $this->config->get('config_mail_parameter'),
+					'smtp_hostname' => $this->config->get('config_mail_smtp_hostname'),
+					'smtp_username' => $this->config->get('config_mail_smtp_username'),
+					'smtp_password' => html_entity_decode($this->config->get('config_mail_smtp_password'), ENT_QUOTES, 'UTF-8'),
+					'smtp_port'     => $this->config->get('config_mail_smtp_port'),
+					'smtp_timeout'  => $this->config->get('config_mail_smtp_timeout')
+				];
+
+				$mail = new \Opencart\System\Library\Mail($this->config->get('config_mail_engine'), $mail_option);
+				$mail->setTo($this->config->get('config_email'));
+				// Less spam and fix bug when using SMTP like sendgrid.
+				$mail->setFrom($this->config->get('config_email'));
+				$mail->setReplyTo($this->request->post['email']);
+				$mail->setSender(html_entity_decode($this->request->post['name'], ENT_QUOTES, 'UTF-8'));
+				$mail->setSubject(html_entity_decode(sprintf($this->language->get('email_subject'), $this->request->post['name']), ENT_QUOTES, 'UTF-8'));
+				$mail->setText($this->request->post['enquiry']);
+				$mail->send();
+			}
+
+			$json['redirect'] = $this->url->link('information/contact.success', 'language=' . $this->config->get('config_language'), true);
+		}
+
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($json));
+	}
+
+	/**
+	 * Success
+	 *
+	 * @return void
+	 */
+	public function success(): void {
+		$this->load->language('information/contact');
+
+		$this->document->setTitle($this->language->get('heading_title'));
+
+		$data['breadcrumbs'] = [];
+
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('text_home'),
-			'href' => $this->url->link('common/home')
-		);
+			'href' => $this->url->link('common/home', 'language=' . $this->config->get('config_language'))
+		];
 
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('heading_title'),
-			'href' => $this->url->link('information/contact')
-		);
+			'href' => $this->url->link('information/contact', 'language=' . $this->config->get('config_language'))
+		];
 
-		$data['heading_title'] = $this->language->get('heading_title');
+		$data['text_message'] = $this->language->get('text_message');
 
-		$data['text_message'] = $this->language->get('text_success');
-
-		$data['button_continue'] = $this->language->get('button_continue');
-
-		$data['continue'] = $this->url->link('common/home');
+		$data['continue'] = $this->url->link('common/home', 'language=' . $this->config->get('config_language'));
 
 		$data['column_left'] = $this->load->controller('common/column_left');
 		$data['column_right'] = $this->load->controller('common/column_right');
@@ -191,64 +206,6 @@ class ControllerInformationContact extends Controller {
 		$data['footer'] = $this->load->controller('common/footer');
 		$data['header'] = $this->load->controller('common/header');
 
-		if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/common/success.tpl')) {
-			$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/common/success.tpl', $data));
-		} else {
-			$this->response->setOutput($this->load->view('default/template/common/success.tpl', $data));
-		}
-	}
-
-	protected function validate() {
-		if ((utf8_strlen($this->request->post['name']) < 3) || (utf8_strlen($this->request->post['name']) > 32)) {
-			$this->error['name'] = $this->language->get('error_name');
-		}
-
-		if (!preg_match('/^[^\@]+@.*\.[a-z]{2,6}$/i', $this->request->post['email'])) {
-			$this->error['email'] = $this->language->get('error_email');
-		}
-
-		if ((utf8_strlen($this->request->post['enquiry']) < 10) || (utf8_strlen($this->request->post['enquiry']) > 3000)) {
-			$this->error['enquiry'] = $this->language->get('error_enquiry');
-		}
-
-		if (empty($this->session->data['captcha']) || ($this->session->data['captcha'] != $this->request->post['captcha'])) {
-			$this->error['captcha'] = $this->language->get('error_captcha');
-		}
-
-		return !$this->error;  	  
-	}
-
-	public function captcha() {
-		$this->session->data['captcha'] = substr(sha1(mt_rand()), 17, 6);
-
-		$image = imagecreatetruecolor(150, 35);
-
-		$width = imagesx($image); 
-		$height = imagesy($image);
-
-		$black = imagecolorallocate($image, 0, 0, 0); 
-		$white = imagecolorallocate($image, 255, 255, 255); 
-		$red = imagecolorallocatealpha($image, 255, 0, 0, 75); 
-		$green = imagecolorallocatealpha($image, 0, 255, 0, 75); 
-		$blue = imagecolorallocatealpha($image, 0, 0, 255, 75); 
-
-		imagefilledrectangle($image, 0, 0, $width, $height, $white); 
-
-		imagefilledellipse($image, ceil(rand(5, 145)), ceil(rand(0, 35)), 30, 30, $red); 
-		imagefilledellipse($image, ceil(rand(5, 145)), ceil(rand(0, 35)), 30, 30, $green); 
-		imagefilledellipse($image, ceil(rand(5, 145)), ceil(rand(0, 35)), 30, 30, $blue); 
-
-		imagefilledrectangle($image, 0, 0, $width, 0, $black); 
-		imagefilledrectangle($image, $width - 1, 0, $width - 1, $height - 1, $black); 
-		imagefilledrectangle($image, 0, 0, 0, $height - 1, $black); 
-		imagefilledrectangle($image, 0, $height - 1, $width, $height - 1, $black); 
-
-		imagestring($image, 10, intval(($width - (strlen($this->session->data['captcha']) * 9)) / 2),  intval(($height - 15) / 2), $this->session->data['captcha'], $black);
-
-		header('Content-type: image/jpeg');
-
-		imagejpeg($image);
-
-		imagedestroy($image);
+		$this->response->setOutput($this->load->view('common/success', $data));
 	}
 }

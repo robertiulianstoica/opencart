@@ -1,190 +1,81 @@
 <?php
-class ControllerAccountEdit extends Controller {
-	private $error = array();
-
-	public function index() {
-		if (!$this->customer->isLogged()) {
-			$this->session->data['redirect'] = $this->url->link('account/edit', '', 'SSL');
-
-			$this->response->redirect($this->url->link('account/login', '', 'SSL'));
-		}
-
+namespace Opencart\Catalog\Controller\Account;
+/**
+ * Class Edit
+ *
+ * @package Opencart\Catalog\Controller\Account
+ */
+class Edit extends \Opencart\System\Engine\Controller {
+	/**
+	 * @return void
+	 */
+	public function index(): void {
 		$this->load->language('account/edit');
+
+		if (!$this->customer->isLogged() || (!isset($this->request->get['customer_token']) || !isset($this->session->data['customer_token']) || ($this->request->get['customer_token'] != $this->session->data['customer_token']))) {
+			$this->session->data['redirect'] = $this->url->link('account/edit', 'language=' . $this->config->get('config_language'));
+
+			$this->response->redirect($this->url->link('account/login', 'language=' . $this->config->get('config_language'), true));
+		}
 
 		$this->document->setTitle($this->language->get('heading_title'));
 
+		$data['breadcrumbs'] = [];
+
+		$data['breadcrumbs'][] = [
+			'text' => $this->language->get('text_home'),
+			'href' => $this->url->link('common/home', 'language=' . $this->config->get('config_language'))
+		];
+
+		$data['breadcrumbs'][] = [
+			'text' => $this->language->get('text_account'),
+			'href' => $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'])
+		];
+
+		$data['breadcrumbs'][] = [
+			'text' => $this->language->get('text_edit'),
+			'href' => $this->url->link('account/edit', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'])
+		];
+
+		$data['error_upload_size'] = sprintf($this->language->get('error_upload_size'), $this->config->get('config_file_max_size'));
+
+		$data['config_file_max_size'] = ((int)$this->config->get('config_file_max_size') * 1024 * 1024);
+		$data['config_telephone_display'] = $this->config->get('config_telephone_display');
+		$data['config_telephone_required'] = $this->config->get('config_telephone_required');
+
+		$data['save'] = $this->url->link('account/edit.save', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token']);
+
+		$this->session->data['upload_token'] = oc_token(32);
+
+		$data['upload'] = $this->url->link('tool/upload', 'language=' . $this->config->get('config_language') . '&upload_token=' . $this->session->data['upload_token']);
+
 		$this->load->model('account/customer');
 
-		if (($this->request->server['REQUEST_METHOD'] == 'POST') && $this->validate()) {
-			$this->model_account_customer->editCustomer($this->request->post);
+		$customer_info = $this->model_account_customer->getCustomer($this->customer->getId());
 
-			$this->session->data['success'] = $this->language->get('text_success');
-
-			// Add to activity log
-			$this->load->model('account/activity');
-
-			$activity_data = array(
-				'customer_id' => $this->customer->getId(),
-				'name'        => $this->customer->getFirstName() . ' ' . $this->customer->getLastName()
-			);
-
-			$this->model_account_activity->addActivity('edit', $activity_data);
-
-			$this->response->redirect($this->url->link('account/account', '', 'SSL'));
-		}
-
-		$data['breadcrumbs'] = array();
-
-		$data['breadcrumbs'][] = array(
-			'text'      => $this->language->get('text_home'),
-			'href'      => $this->url->link('common/home'),     	
-			'separator' => false
-		);
-
-		$data['breadcrumbs'][] = array(
-			'text'      => $this->language->get('text_account'),
-			'href'      => $this->url->link('account/account', '', 'SSL'),        	
-			'separator' => $this->language->get('text_separator')
-		);
-
-		$data['breadcrumbs'][] = array(
-			'text'      => $this->language->get('text_edit'),
-			'href'      => $this->url->link('account/edit', '', 'SSL'),       	
-			'separator' => $this->language->get('text_separator')
-		);
-
-		$data['heading_title'] = $this->language->get('heading_title');
-
-		$data['text_your_details'] = $this->language->get('text_your_details');
-		$data['text_select'] = $this->language->get('text_select');
-
-		$data['entry_firstname'] = $this->language->get('entry_firstname');
-		$data['entry_lastname'] = $this->language->get('entry_lastname');
-		$data['entry_email'] = $this->language->get('entry_email');
-		$data['entry_telephone'] = $this->language->get('entry_telephone');
-		$data['entry_fax'] = $this->language->get('entry_fax');
-
-		$data['button_continue'] = $this->language->get('button_continue');
-		$data['button_back'] = $this->language->get('button_back');
-		$data['button_upload'] = $this->language->get('button_upload');
-
-		if (isset($this->error['warning'])) {
-			$data['error_warning'] = $this->error['warning'];
-		} else {
-			$data['error_warning'] = '';
-		}
-
-		if (isset($this->error['firstname'])) {
-			$data['error_firstname'] = $this->error['firstname'];
-		} else {
-			$data['error_firstname'] = '';
-		}
-
-		if (isset($this->error['lastname'])) {
-			$data['error_lastname'] = $this->error['lastname'];
-		} else {
-			$data['error_lastname'] = '';
-		}
-
-		if (isset($this->error['email'])) {
-			$data['error_email'] = $this->error['email'];
-		} else {
-			$data['error_email'] = '';
-		}	
-
-		if (isset($this->error['telephone'])) {
-			$data['error_telephone'] = $this->error['telephone'];
-		} else {
-			$data['error_telephone'] = '';
-		}	
-
-		if (isset($this->error['custom_field'])) {
-			$data['error_custom_field'] = $this->error['custom_field'];
-		} else {
-			$data['error_custom_field'] = array();
-		}
-
-		$data['action'] = $this->url->link('account/edit', '', 'SSL');
-
-		if ($this->request->server['REQUEST_METHOD'] != 'POST') {
-			$customer_info = $this->model_account_customer->getCustomer($this->customer->getId());
-		}
-
-		if (isset($this->request->post['firstname'])) {
-			$data['firstname'] = $this->request->post['firstname'];
-		} elseif (!empty($customer_info)) {
-			$data['firstname'] = $customer_info['firstname'];
-		} else {
-			$data['firstname'] = '';
-		}
-
-		if (isset($this->request->post['lastname'])) {
-			$data['lastname'] = $this->request->post['lastname'];
-		} elseif (!empty($customer_info)) {
-			$data['lastname'] = $customer_info['lastname'];
-		} else {
-			$data['lastname'] = '';
-		}
-
-		if (isset($this->request->post['email'])) {
-			$data['email'] = $this->request->post['email'];
-		} elseif (!empty($customer_info)) {
-			$data['email'] = $customer_info['email'];
-		} else {
-			$data['email'] = '';
-		}
-
-		if (isset($this->request->post['telephone'])) {
-			$data['telephone'] = $this->request->post['telephone'];
-		} elseif (!empty($customer_info)) {
-			$data['telephone'] = $customer_info['telephone'];
-		} else {
-			$data['telephone'] = '';
-		}
-
-		if (isset($this->request->post['fax'])) {
-			$data['fax'] = $this->request->post['fax'];
-		} elseif (!empty($customer_info)) {
-			$data['fax'] = $customer_info['fax'];
-		} else {
-			$data['fax'] = '';
-		}
+		$data['firstname'] = $customer_info['firstname'];
+		$data['lastname'] = $customer_info['lastname'];
+		$data['email'] = $customer_info['email'];
+		$data['telephone'] = $customer_info['telephone'];
 
 		// Custom Fields
-		if (isset($this->request->post['custom_field'])) {
-			$custom_field_info = $this->request->post['custom_field'];		
-		} elseif (!empty($customer_info)) {
-			$custom_field_info = unserialize($customer_info['custom_field']);
-		} else {
-			$custom_field_info = array();
-		}		
+		$data['custom_fields'] = [];
 
 		$this->load->model('account/custom_field');
 
-		$data['custom_fields'] = array();
-
-		// If a post request then get a list of all fields that should have been posted for validation checking.
-		$custom_fields = $this->model_account_custom_field->getCustomFields('account', $this->config->get('config_customer_group_id'));
+		$custom_fields = $this->model_account_custom_field->getCustomFields($this->customer->getGroupId());
 
 		foreach ($custom_fields as $custom_field) {
-			if ($custom_field['type'] == 'checkbox') {
-				$value = array();
-			} else {
-				$value = '';
+			if ($custom_field['location'] == 'account') {
+				$data['custom_fields'][] = $custom_field;
 			}
-
-			$data['custom_fields'][] = array(
-				'custom_field_id'    => $custom_field['custom_field_id'],
-				'custom_field_value' => $custom_field['custom_field_value'],
-				'name'               => $custom_field['name'],
-				'type'               => $custom_field['type'],
-				'value'              => isset($custom_field_info[$custom_field['custom_field_id']]) ? $custom_field_info[$custom_field['custom_field_id']] : $value,
-				'required'           => $custom_field['required'],
-				'sort_order'         => $custom_field['sort_order']
-			);
 		}
 
-		$data['back'] = $this->url->link('account/account', '', 'SSL');
+		$data['account_custom_field'] = $customer_info['custom_field'];
+
+		$data['back'] = $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token']);
+
+		$data['language'] = $this->config->get('config_language');
 
 		$data['column_left'] = $this->load->controller('common/column_left');
 		$data['column_right'] = $this->load->controller('common/column_right');
@@ -193,45 +84,103 @@ class ControllerAccountEdit extends Controller {
 		$data['footer'] = $this->load->controller('common/footer');
 		$data['header'] = $this->load->controller('common/header');
 
-		if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/account/edit.tpl')) {
-			$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/account/edit.tpl', $data));
-		} else {
-			$this->response->setOutput($this->load->view('default/template/account/edit.tpl', $data));
-		}
+		$this->response->setOutput($this->load->view('account/edit', $data));
 	}
 
-	protected function validate() {
-		if ((utf8_strlen($this->request->post['firstname']) < 1) || (utf8_strlen($this->request->post['firstname']) > 32)) {
-			$this->error['firstname'] = $this->language->get('error_firstname');
+	/**
+	 * Save
+	 *
+	 * @return void
+	 */
+	public function save(): void {
+		$this->load->language('account/edit');
+
+		$json = [];
+
+		if (!$this->customer->isLogged() || (!isset($this->request->get['customer_token']) || !isset($this->session->data['customer_token']) || ($this->request->get['customer_token'] != $this->session->data['customer_token']))) {
+			$this->session->data['redirect'] = $this->url->link('account/edit', 'language=' . $this->config->get('config_language'));
+
+			$json['redirect'] = $this->url->link('account/login', 'language=' . $this->config->get('config_language'), true);
 		}
 
-		if ((utf8_strlen($this->request->post['lastname']) < 1) || (utf8_strlen($this->request->post['lastname']) > 32)) {
-			$this->error['lastname'] = $this->language->get('error_lastname');
-		}
+		if (!$json) {
+			$keys = [
+				'firstname',
+				'lastname',
+				'email',
+				'telephone'
+			];
 
-		if ((utf8_strlen($this->request->post['email']) > 96) || !preg_match('/^[^\@]+@.*\.[a-z]{2,6}$/i', $this->request->post['email'])) {
-			$this->error['email'] = $this->language->get('error_email');
-		}
+			foreach ($keys as $key) {
+				if (!isset($this->request->post[$key])) {
+					$this->request->post[$key] = '';
+				}
+			}
 
-		if (($this->customer->getEmail() != $this->request->post['email']) && $this->model_account_customer->getTotalCustomersByEmail($this->request->post['email'])) {
-			$this->error['warning'] = $this->language->get('error_exists');
-		}
+			if (!oc_validate_length($this->request->post['firstname'], 1, 32)) {
+				$json['error']['firstname'] = $this->language->get('error_firstname');
+			}
 
-		if ((utf8_strlen($this->request->post['telephone']) < 3) || (utf8_strlen($this->request->post['telephone']) > 32)) {
-			$this->error['telephone'] = $this->language->get('error_telephone');
-		}
+			if (!oc_validate_length($this->request->post['lastname'], 1, 32)) {
+				$json['error']['lastname'] = $this->language->get('error_lastname');
+			}
 
-		// Custom Field Validation
-		$this->load->model('account/custom_field');
+			if (!oc_validate_email($this->request->post['email'])) {
+				$json['error']['email'] = $this->language->get('error_email');
+			}
 
-		$custom_fields = $this->model_account_custom_field->getCustomFields('account', $this->config->get('config_customer_group_id'));
+			$this->load->model('account/customer');
 
-		foreach ($custom_fields as $custom_field) {
-			if ($custom_field['required'] && empty($this->request->post['custom_field'][$custom_field['custom_field_id']])) {
-				$this->error['custom_field'][$custom_field['custom_field_id']] = sprintf($this->language->get('error_custom_field'), $custom_field['name']);
+			if (($this->customer->getEmail() != $this->request->post['email']) && $this->model_account_customer->getTotalCustomersByEmail($this->request->post['email'])) {
+				$json['error']['warning'] = $this->language->get('error_exists');
+			}
+
+			if ($this->config->get('config_telephone_required') && !oc_validate_length($this->request->post['telephone'], 3, 32)) {
+				$json['error']['telephone'] = $this->language->get('error_telephone');
+			}
+
+			// Custom field validation
+			$this->load->model('account/custom_field');
+
+			$custom_fields = $this->model_account_custom_field->getCustomFields($this->customer->getGroupId());
+
+			foreach ($custom_fields as $custom_field) {
+				if ($custom_field['location'] == 'account') {
+					if ($custom_field['required'] && empty($this->request->post['custom_field'][$custom_field['custom_field_id']])) {
+						$json['error']['custom_field_' . $custom_field['custom_field_id']] = sprintf($this->language->get('error_custom_field'), $custom_field['name']);
+					} elseif ($custom_field['type'] == 'text' && !empty($custom_field['validation']) && !oc_validate_regex($this->request->post['custom_field'][$custom_field['custom_field_id']], $custom_field['validation'])) {
+						$json['error']['custom_field_' . $custom_field['custom_field_id']] = sprintf($this->language->get('error_regex'), $custom_field['name']);
+					}
+				}
 			}
 		}
 
-		return !$this->error;
+		if (!$json) {
+			// Update customer in db
+			$this->model_account_customer->editCustomer($this->customer->getId(), $this->request->post);
+
+			$this->session->data['success'] = $this->language->get('text_success');
+
+			// Update customer session details
+			$this->session->data['customer'] = [
+				'customer_id'       => $this->customer->getId(),
+				'customer_group_id' => $this->customer->getGroupId(),
+				'firstname'         => $this->request->post['firstname'],
+				'lastname'          => $this->request->post['lastname'],
+				'email'             => $this->request->post['email'],
+				'telephone'         => $this->request->post['telephone'],
+				'custom_field'      => $this->request->post['custom_field'] ?? []
+			];
+
+			unset($this->session->data['shipping_method']);
+			unset($this->session->data['shipping_methods']);
+			unset($this->session->data['payment_method']);
+			unset($this->session->data['payment_methods']);
+
+			$json['redirect'] = $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'], true);
+		}
+
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($json));
 	}
 }

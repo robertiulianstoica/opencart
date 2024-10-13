@@ -1,63 +1,30 @@
-<?php 
-class ControllerAccountOrder extends Controller {
-	private $error = array();
-
-	public function index() {
-		if (!$this->customer->isLogged()) {
-			$this->session->data['redirect'] = $this->url->link('account/order', '', 'SSL');
-
-			$this->response->redirect($this->url->link('account/login', '', 'SSL'));
-		}
-
+<?php
+namespace Opencart\Catalog\Controller\Account;
+/**
+ * Class Order
+ *
+ * @package Opencart\Catalog\Controller\Account
+ */
+class Order extends \Opencart\System\Engine\Controller {
+	/**
+	 * @return void
+	 */
+	public function index(): void {
 		$this->load->language('account/order');
 
-		$this->load->model('account/order');
+		if (isset($this->request->get['page'])) {
+			$page = (int)$this->request->get['page'];
+		} else {
+			$page = 1;
+		}
 
-		if (isset($this->request->get['order_id'])) {
-			$order_info = $this->model_account_order->getOrder($this->request->get['order_id']);
+		if (!$this->customer->isLogged() || (!isset($this->request->get['customer_token']) || !isset($this->session->data['customer_token']) || ($this->request->get['customer_token'] != $this->session->data['customer_token']))) {
+			$this->session->data['redirect'] = $this->url->link('account/order', 'language=' . $this->config->get('config_language'));
 
-			if ($order_info) {
-				$order_products = $this->model_account_order->getOrderProducts($this->request->get['order_id']);
-
-				foreach ($order_products as $order_product) {
-					$option_data = array();
-
-					$order_options = $this->model_account_order->getOrderOptions($this->request->get['order_id'], $order_product['order_product_id']);
-
-					foreach ($order_options as $order_option) {
-						if ($order_option['type'] == 'select' || $order_option['type'] == 'radio' || $order_option['type'] == 'image') {
-							$option_data[$order_option['product_option_id']] = $order_option['product_option_value_id'];
-						} elseif ($order_option['type'] == 'checkbox') {
-							$option_data[$order_option['product_option_id']][] = $order_option['product_option_value_id'];
-						} elseif ($order_option['type'] == 'text' || $order_option['type'] == 'textarea' || $order_option['type'] == 'date' || $order_option['type'] == 'datetime' || $order_option['type'] == 'time') {
-							$option_data[$order_option['product_option_id']] = $order_option['value'];	
-						} elseif ($order_option['type'] == 'file') {
-							$option_data[$order_option['product_option_id']] = $this->encryption->encrypt($order_option['value']);
-						}
-					}
-
-					$this->session->data['success'] = sprintf($this->language->get('text_success'), $this->request->get['order_id']);
-
-					$this->cart->add($order_product['product_id'], $order_product['quantity'], $option_data);
-				}
-
-				$this->response->redirect($this->url->link('checkout/cart'));
-			}
+			$this->response->redirect($this->url->link('account/login', 'language=' . $this->config->get('config_language'), true));
 		}
 
 		$this->document->setTitle($this->language->get('heading_title'));
-
-		$data['breadcrumbs'] = array();
-
-		$data['breadcrumbs'][] = array(
-			'text' => $this->language->get('text_home'),
-			'href' => $this->url->link('common/home')
-		);
-
-		$data['breadcrumbs'][] = array(
-			'text' => $this->language->get('text_account'),
-			'href' => $this->url->link('account/account', '', 'SSL')
-		);
 
 		$url = '';
 
@@ -65,65 +32,64 @@ class ControllerAccountOrder extends Controller {
 			$url .= '&page=' . $this->request->get['page'];
 		}
 
-		$data['breadcrumbs'][] = array(
+		$data['breadcrumbs'] = [];
+
+		$data['breadcrumbs'][] = [
+			'text' => $this->language->get('text_home'),
+			'href' => $this->url->link('common/home', 'language=' . $this->config->get('config_language'))
+		];
+
+		$data['breadcrumbs'][] = [
+			'text' => $this->language->get('text_account'),
+			'href' => $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'])
+		];
+
+		$data['breadcrumbs'][] = [
 			'text' => $this->language->get('heading_title'),
-			'href' => $this->url->link('account/order', $url, 'SSL')
-		);
+			'href' => $this->url->link('account/order', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . $url)
+		];
 
-		$data['heading_title'] = $this->language->get('heading_title');
+		$limit = 10;
 
-		$data['text_empty'] = $this->language->get('text_empty');
+		$data['orders'] = [];
 
-		$data['column_order_id'] = $this->language->get('column_order_id');
-		$data['column_status'] = $this->language->get('column_status');
-		$data['column_date_added'] = $this->language->get('column_date_added');
-		$data['column_customer'] = $this->language->get('column_customer');
-		$data['column_product'] = $this->language->get('column_product');
-		$data['column_total'] = $this->language->get('column_total');
+		$this->load->model('account/order');
+		$this->load->model('localisation/order_status');
 
-		$data['button_view'] = $this->language->get('button_view');
-		$data['button_reorder'] = $this->language->get('button_reorder');
-		$data['button_continue'] = $this->language->get('button_continue');
+		$results = $this->model_account_order->getOrders(($page - 1) * $limit, $limit);
 
-		if (isset($this->request->get['page'])) {
-			$page = $this->request->get['page'];
-		} else {
-			$page = 1;
+		foreach ($results as $result) {
+			$order_status_info = $this->model_localisation_order_status->getOrderStatus($result['order_status_id']);
+
+			if ($order_status_info) {
+				$order_status = $order_status_info['name'];
+			} else {
+				$order_status = '';
+			}
+
+			$data['orders'][] = [
+				'order_id'   => $result['order_id'],
+				'name'       => $result['firstname'] . ' ' . $result['lastname'],
+				'status'     => $order_status,
+				'date_added' => date($this->language->get('date_format_short'), strtotime($result['date_added'])),
+				'products'   => $this->model_account_order->getTotalProductsByOrderId($result['order_id']),
+				'total'      => $this->currency->format($result['total'], $result['currency_code'], $result['currency_value']),
+				'view'       => $this->url->link('account/order.info', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&order_id=' . $result['order_id']),
+			];
 		}
-
-		$data['orders'] = array();
 
 		$order_total = $this->model_account_order->getTotalOrders();
 
-		$results = $this->model_account_order->getOrders(($page - 1) * 10, 10);
+		$data['pagination'] = $this->load->controller('common/pagination', [
+			'total' => $order_total,
+			'page'  => $page,
+			'limit' => $limit,
+			'url'   => $this->url->link('account/order', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&page={page}')
+		]);
 
-		foreach ($results as $result) {
-			$product_total = $this->model_account_order->getTotalOrderProductsByOrderId($result['order_id']);
-			$voucher_total = $this->model_account_order->getTotalOrderVouchersByOrderId($result['order_id']);
+		$data['results'] = sprintf($this->language->get('text_pagination'), ($order_total) ? (($page - 1) * $limit) + 1 : 0, ((($page - 1) * $limit) > ($order_total - $limit)) ? $order_total : ((($page - 1) * $limit) + $limit), $order_total, ceil($order_total / $limit));
 
-			$data['orders'][] = array(
-				'order_id'   => $result['order_id'],
-				'name'       => $result['firstname'] . ' ' . $result['lastname'],
-				'status'     => $result['status'],
-				'date_added' => date($this->language->get('date_format_short'), strtotime($result['date_added'])),
-				'products'   => ($product_total + $voucher_total),
-				'total'      => $this->currency->format($result['total'], $result['currency_code'], $result['currency_value']),
-				'href'       => $this->url->link('account/order/info', 'order_id=' . $result['order_id'], 'SSL'),
-				'reorder'    => $this->url->link('account/order', 'order_id=' . $result['order_id'], 'SSL')
-			);
-		}
-
-		$pagination = new Pagination();
-		$pagination->total = $order_total;
-		$pagination->page = $page;
-		$pagination->limit = 10;
-		$pagination->url = $this->url->link('account/order', 'page={page}', 'SSL');
-
-		$data['pagination'] = $pagination->render();
-
-		$data['results'] = sprintf($this->language->get('text_pagination'), ($order_total) ? (($page - 1) * 10) + 1 : 0, ((($page - 1) * 10) > ($order_total - 10)) ? $order_total : ((($page - 1) * 10) + 10), $order_total, ceil($order_total / 10));
-
-		$data['continue'] = $this->url->link('account/account', '', 'SSL');
+		$data['continue'] = $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token']);
 
 		$data['column_left'] = $this->load->controller('common/column_left');
 		$data['column_right'] = $this->load->controller('common/column_right');
@@ -132,26 +98,27 @@ class ControllerAccountOrder extends Controller {
 		$data['footer'] = $this->load->controller('common/footer');
 		$data['header'] = $this->load->controller('common/header');
 
-		if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/account/order_list.tpl')) {
-			$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/account/order_list.tpl', $data));
-		} else {
-			$this->response->setOutput($this->load->view('default/template/account/order_list.tpl', $data));
-		}					
+		$this->response->setOutput($this->load->view('account/order_list', $data));
 	}
 
-	public function info() { 
+	/**
+	 * Info
+	 *
+	 * @return \Opencart\System\Engine\Action|null
+	 */
+	public function info(): ?\Opencart\System\Engine\Action {
 		$this->load->language('account/order');
 
 		if (isset($this->request->get['order_id'])) {
-			$order_id = $this->request->get['order_id'];
+			$order_id = (int)$this->request->get['order_id'];
 		} else {
 			$order_id = 0;
-		}	
+		}
 
-		if (!$this->customer->isLogged()) {
-			$this->session->data['redirect'] = $this->url->link('account/order/info', 'order_id=' . $order_id, 'SSL');
+		if (!$this->customer->isLogged() || (!isset($this->request->get['customer_token']) || !isset($this->session->data['customer_token']) || ($this->request->get['customer_token'] != $this->session->data['customer_token']))) {
+			$this->session->data['redirect'] = $this->url->link('account/order', 'language=' . $this->config->get('config_language'));
 
-			$this->response->redirect($this->url->link('account/login', '', 'SSL'));
+			$this->response->redirect($this->url->link('account/login', 'language=' . $this->config->get('config_language'), true));
 		}
 
 		$this->load->model('account/order');
@@ -159,19 +126,11 @@ class ControllerAccountOrder extends Controller {
 		$order_info = $this->model_account_order->getOrder($order_id);
 
 		if ($order_info) {
-			$this->document->setTitle($this->language->get('text_order'));
+			$heading_title = sprintf($this->language->get('text_order'), $order_info['order_id']);
 
-			$data['breadcrumbs'] = array();
+			$this->document->setTitle($heading_title);
 
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('text_home'),
-				'href' => $this->url->link('common/home')
-			); 
-
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('text_account'),
-				'href' => $this->url->link('account/account', '', 'SSL')     	
-			);
+			$data['heading_title'] = $heading_title;
 
 			$url = '';
 
@@ -179,41 +138,27 @@ class ControllerAccountOrder extends Controller {
 				$url .= '&page=' . $this->request->get['page'];
 			}
 
-			$data['breadcrumbs'][] = array(
+			$data['breadcrumbs'] = [];
+
+			$data['breadcrumbs'][] = [
+				'text' => $this->language->get('text_home'),
+				'href' => $this->url->link('common/home', 'language=' . $this->config->get('config_language'))
+			];
+
+			$data['breadcrumbs'][] = [
+				'text' => $this->language->get('text_account'),
+				'href' => $this->url->link('account/account', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'])
+			];
+
+			$data['breadcrumbs'][] = [
 				'text' => $this->language->get('heading_title'),
-				'href' => $this->url->link('account/order', $url, 'SSL')
-			);
+				'href' => $this->url->link('account/order', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . $url)
+			];
 
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('text_order'),
-				'href' => $this->url->link('account/order/info', 'order_id=' . $this->request->get['order_id'] . $url, 'SSL')
-			);
-
-			$data['heading_title'] = $this->language->get('text_order');
-
-			$data['text_order_detail'] = $this->language->get('text_order_detail');
-			$data['text_invoice_no'] = $this->language->get('text_invoice_no');
-			$data['text_order_id'] = $this->language->get('text_order_id');
-			$data['text_date_added'] = $this->language->get('text_date_added');
-			$data['text_shipping_method'] = $this->language->get('text_shipping_method');
-			$data['text_shipping_address'] = $this->language->get('text_shipping_address');
-			$data['text_payment_method'] = $this->language->get('text_payment_method');
-			$data['text_payment_address'] = $this->language->get('text_payment_address');
-			$data['text_history'] = $this->language->get('text_history');
-			$data['text_comment'] = $this->language->get('text_comment');
-
-			$data['column_name'] = $this->language->get('column_name');
-			$data['column_model'] = $this->language->get('column_model');
-			$data['column_quantity'] = $this->language->get('column_quantity');
-			$data['column_price'] = $this->language->get('column_price');
-			$data['column_total'] = $this->language->get('column_total');
-			$data['column_action'] = $this->language->get('column_action');
-			$data['column_date_added'] = $this->language->get('column_date_added');
-			$data['column_status'] = $this->language->get('column_status');
-			$data['column_comment'] = $this->language->get('column_comment');
-
-			$data['button_return'] = $this->language->get('button_return');
-			$data['button_continue'] = $this->language->get('button_continue');
+			$data['breadcrumbs'][] = [
+				'text' => $heading_title,
+				'href' => $this->url->link('account/order.info', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&order_id=' . $order_id . $url)
+			];
 
 			if ($order_info['invoice_no']) {
 				$data['invoice_no'] = $order_info['invoice_prefix'] . $order_info['invoice_no'];
@@ -221,16 +166,28 @@ class ControllerAccountOrder extends Controller {
 				$data['invoice_no'] = '';
 			}
 
-			$data['order_id'] = $this->request->get['order_id'];
+			$data['order_id'] = $order_id;
+
+			$this->load->model('localisation/order_status');
+
+			$order_status_info = $this->model_localisation_order_status->getOrderStatus($order_info['order_status_id']);
+
+			if ($order_status_info) {
+				$data['order_status'] = $order_status_info['name'];
+			} else {
+				$data['order_status'] = '';
+			}
+
 			$data['date_added'] = date($this->language->get('date_format_short'), strtotime($order_info['date_added']));
 
+			// Payment Address
 			if ($order_info['payment_address_format']) {
 				$format = $order_info['payment_address_format'];
 			} else {
 				$format = '{firstname} {lastname}' . "\n" . '{company}' . "\n" . '{address_1}' . "\n" . '{address_2}' . "\n" . '{city} {postcode}' . "\n" . '{zone}' . "\n" . '{country}';
 			}
 
-			$find = array(
+			$find = [
 				'{firstname}',
 				'{lastname}',
 				'{company}',
@@ -241,9 +198,9 @@ class ControllerAccountOrder extends Controller {
 				'{zone}',
 				'{zone_code}',
 				'{country}'
-			);
+			];
 
-			$replace = array(
+			$replace = [
 				'firstname' => $order_info['payment_firstname'],
 				'lastname'  => $order_info['payment_lastname'],
 				'company'   => $order_info['payment_company'],
@@ -254,180 +211,326 @@ class ControllerAccountOrder extends Controller {
 				'zone'      => $order_info['payment_zone'],
 				'zone_code' => $order_info['payment_zone_code'],
 				'country'   => $order_info['payment_country']
-			);
+			];
 
-			$data['payment_address'] = str_replace(array("\r\n", "\r", "\n"), '<br />', preg_replace(array("/\s\s+/", "/\r\r+/", "/\n\n+/"), '<br />', trim(str_replace($find, $replace, $format))));
+			$pattern_1 = [
+				"\r\n",
+				"\r",
+				"\n"
+			];
 
-			$data['payment_method'] = $order_info['payment_method'];
+			$pattern_2 = [
+				"/\\s\\s+/",
+				"/\r\r+/",
+				"/\n\n+/"
+			];
 
-			if ($order_info['shipping_address_format']) {
-				$format = $order_info['shipping_address_format'];
+			$data['payment_address'] = str_replace($pattern_1, '<br/>', preg_replace($pattern_2, '<br/>', trim(str_replace($find, $replace, $format))));
+
+			$data['payment_method'] = $order_info['payment_method']['name'];
+
+			// Shipping Address
+			if ($order_info['shipping_method']) {
+				if ($order_info['shipping_address_format']) {
+					$format = $order_info['shipping_address_format'];
+				} else {
+					$format = '{firstname} {lastname}' . "\n" . '{company}' . "\n" . '{address_1}' . "\n" . '{address_2}' . "\n" . '{city} {postcode}' . "\n" . '{zone}' . "\n" . '{country}';
+				}
+
+				$find = [
+					'{firstname}',
+					'{lastname}',
+					'{company}',
+					'{address_1}',
+					'{address_2}',
+					'{city}',
+					'{postcode}',
+					'{zone}',
+					'{zone_code}',
+					'{country}'
+				];
+
+				$replace = [
+					'firstname' => $order_info['shipping_firstname'],
+					'lastname'  => $order_info['shipping_lastname'],
+					'company'   => $order_info['shipping_company'],
+					'address_1' => $order_info['shipping_address_1'],
+					'address_2' => $order_info['shipping_address_2'],
+					'city'      => $order_info['shipping_city'],
+					'postcode'  => $order_info['shipping_postcode'],
+					'zone'      => $order_info['shipping_zone'],
+					'zone_code' => $order_info['shipping_zone_code'],
+					'country'   => $order_info['shipping_country']
+				];
+
+				$data['shipping_address'] = str_replace($pattern_1, '<br/>', preg_replace($pattern_2, '<br/>', trim(str_replace($find, $replace, $format))));
+
+				$data['shipping_method'] = $order_info['shipping_method']['name'];
 			} else {
-				$format = '{firstname} {lastname}' . "\n" . '{company}' . "\n" . '{address_1}' . "\n" . '{address_2}' . "\n" . '{city} {postcode}' . "\n" . '{zone}' . "\n" . '{country}';
+				$data['shipping_address'] = '';
+				$data['shipping_method'] = '';
 			}
 
-			$find = array(
-				'{firstname}',
-				'{lastname}',
-				'{company}',
-				'{address_1}',
-				'{address_2}',
-				'{city}',
-				'{postcode}',
-				'{zone}',
-				'{zone_code}',
-				'{country}'
-			);
-
-			$replace = array(
-				'firstname' => $order_info['shipping_firstname'],
-				'lastname'  => $order_info['shipping_lastname'],
-				'company'   => $order_info['shipping_company'],
-				'address_1' => $order_info['shipping_address_1'],
-				'address_2' => $order_info['shipping_address_2'],
-				'city'      => $order_info['shipping_city'],
-				'postcode'  => $order_info['shipping_postcode'],
-				'zone'      => $order_info['shipping_zone'],
-				'zone_code' => $order_info['shipping_zone_code'],
-				'country'   => $order_info['shipping_country']
-			);
-
-			$data['shipping_address'] = str_replace(array("\r\n", "\r", "\n"), '<br />', preg_replace(array("/\s\s+/", "/\r\r+/", "/\n\n+/"), '<br />', trim(str_replace($find, $replace, $format))));
-
-			$data['shipping_method'] = $order_info['shipping_method'];
+			$this->load->model('account/subscription');
+			$this->load->model('catalog/product');
+			$this->load->model('tool/upload');
 
 			// Products
-			$data['products'] = array();
+			$data['products'] = [];
 
-			$products = $this->model_account_order->getOrderProducts($this->request->get['order_id']);
+			$products = $this->model_account_order->getProducts($order_id);
 
 			foreach ($products as $product) {
-				$option_data = array();
+				$option_data = [];
 
-				$options = $this->model_account_order->getOrderOptions($this->request->get['order_id'], $product['order_product_id']);
+				$options = $this->model_account_order->getOptions($order_id, $product['order_product_id']);
 
 				foreach ($options as $option) {
 					if ($option['type'] != 'file') {
 						$value = $option['value'];
 					} else {
-						$value = utf8_substr($option['value'], 0, utf8_strrpos($option['value'], '.'));
+						$upload_info = $this->model_tool_upload->getUploadByCode($option['value']);
+
+						if ($upload_info) {
+							$value = $upload_info['name'];
+						} else {
+							$value = '';
+						}
 					}
 
-					$option_data[] = array(
+					$option_data[] = [
 						'name'  => $option['name'],
-						'value' => (utf8_strlen($value) > 20 ? utf8_substr($value, 0, 20) . '..' : $value)
-					);					
+						'value' => (oc_strlen($value) > 20 ? oc_substr($value, 0, 20) . '..' : $value)
+					];
 				}
 
-				$data['products'][] = array(
-					'name'     => $product['name'],
-					'model'    => $product['model'],
-					'option'   => $option_data,
-					'quantity' => $product['quantity'],
-					'price'    => $this->currency->format($product['price'] + ($this->config->get('config_tax') ? $product['tax'] : 0), $order_info['currency_code'], $order_info['currency_value']),
-					'total'    => $this->currency->format($product['total'] + ($this->config->get('config_tax') ? ($product['tax'] * $product['quantity']) : 0), $order_info['currency_code'], $order_info['currency_value']),
-					'return'   => $this->url->link('account/return/insert', 'order_id=' . $order_info['order_id'] . '&product_id=' . $product['product_id'], 'SSL')
-				);
-			}
+				$description = '';
 
-			// Voucher
-			$data['vouchers'] = array();
+				$subscription_info = $this->model_account_order->getSubscription($order_id, $product['order_product_id']);
 
-			$vouchers = $this->model_account_order->getOrderVouchers($this->request->get['order_id']);
+				if ($subscription_info) {
+					if ($subscription_info['trial_status']) {
+						$trial_price = $this->currency->format($subscription_info['trial_price'] + ($this->config->get('config_tax') ? $subscription_info['trial_tax'] : 0), $order_info['currency_code'], $order_info['currency_value']);
+						$trial_cycle = $subscription_info['trial_cycle'];
+						$trial_frequency = $this->language->get('text_' . $subscription_info['trial_frequency']);
+						$trial_duration = $subscription_info['trial_duration'];
 
-			foreach ($vouchers as $voucher) {
-				$data['vouchers'][] = array(
-					'description' => $voucher['description'],
-					'amount'      => $this->currency->format($voucher['amount'], $order_info['currency_code'], $order_info['currency_value'])
-				);
+						$description .= sprintf($this->language->get('text_subscription_trial'), $trial_price, $trial_cycle, $trial_frequency, $trial_duration);
+					}
+
+					$price = $this->currency->format($subscription_info['price'] + ($this->config->get('config_tax') ? $subscription_info['tax'] : 0), $order_info['currency_code'], $order_info['currency_value']);
+					$cycle = $subscription_info['cycle'];
+					$frequency = $this->language->get('text_' . $subscription_info['frequency']);
+					$duration = $subscription_info['duration'];
+
+					if ($subscription_info['duration']) {
+						$description .= sprintf($this->language->get('text_subscription_duration'), $price, $cycle, $frequency, $duration);
+					} else {
+						$description .= sprintf($this->language->get('text_subscription_cancel'), $price, $cycle, $frequency);
+					}
+				}
+
+				$subscription_info = $this->model_account_subscription->getSubscriptionByOrderProductId($order_id, $product['order_product_id']);
+
+				if ($subscription_info) {
+					$subscription = $this->url->link('account/subscription.info', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&subscription_id=' . $subscription_info['subscription_id']);
+				} else {
+					$subscription = '';
+				}
+
+				$product_info = $this->model_catalog_product->getProduct($product['product_id']);
+
+				if ($product_info) {
+					$reorder = $this->url->link('account/order.reorder', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&order_id=' . $order_id . '&order_product_id=' . $product['order_product_id']);
+				} else {
+					$reorder = '';
+				}
+
+				$data['products'][] = [
+					'name'                     => $product['name'],
+					'model'                    => $product['model'],
+					'option'                   => $option_data,
+					'subscription'             => $subscription,
+					'subscription_description' => $description,
+					'quantity'                 => $product['quantity'],
+					'price'                    => $this->currency->format($product['price'] + ($this->config->get('config_tax') ? $product['tax'] : 0), $order_info['currency_code'], $order_info['currency_value']),
+					'total'                    => $this->currency->format($product['total'] + ($this->config->get('config_tax') ? ($product['tax'] * $product['quantity']) : 0), $order_info['currency_code'], $order_info['currency_value']),
+					'href'                     => $this->url->link('product/product', 'language=' . $this->config->get('config_language') . '&product_id=' . $product['product_id']),
+					'reorder'                  => $reorder,
+					'return'                   => $this->url->link('account/returns.add', 'language=' . $this->config->get('config_language') . '&order_id=' . $order_info['order_id'] . '&product_id=' . $product['product_id'])
+				];
 			}
 
 			// Totals
-			$data['totals'] = array();
+			$data['totals'] = [];
 
-			$totals = $this->model_account_order->getOrderTotals($this->request->get['order_id']);
+			$totals = $this->model_account_order->getTotals($order_id);
 
 			foreach ($totals as $total) {
-				$data['totals'][] = array(
+				$data['totals'][] = [
 					'title' => $total['title'],
 					'text'  => $this->currency->format($total['value'], $order_info['currency_code'], $order_info['currency_value']),
-				);				
+				];
 			}
 
 			$data['comment'] = nl2br($order_info['comment']);
 
 			// History
-			$data['histories'] = array();
+			$data['history'] = $this->getHistory();
 
-			$results = $this->model_account_order->getOrderHistories($this->request->get['order_id']);
-
-			foreach ($results as $result) {
-				$data['histories'][] = array(
-					'date_added' => date($this->language->get('date_format_short'), strtotime($result['date_added'])),
-					'status'     => $result['status'],
-					'comment'    => nl2br($result['comment'])
-				);
-			}
-
-			$data['continue'] = $this->url->link('account/order', '', 'SSL');
+			$data['continue'] = $this->url->link('account/order', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token']);
 
 			$data['column_left'] = $this->load->controller('common/column_left');
 			$data['column_right'] = $this->load->controller('common/column_right');
 			$data['content_top'] = $this->load->controller('common/content_top');
 			$data['content_bottom'] = $this->load->controller('common/content_bottom');
 			$data['footer'] = $this->load->controller('common/footer');
-			$data['header'] = $this->load->controller('common/header');;
+			$data['header'] = $this->load->controller('common/header');
 
-			if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/account/order_info.tpl')) {
-				$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/account/order_info.tpl', $data));
-			} else {
-				$this->response->setOutput($this->load->view('default/template/account/order_info.tpl', $data));
-			}		
+			$this->response->setOutput($this->load->view('account/order_info', $data));
+
+			return null;
 		} else {
-			$this->document->setTitle($this->language->get('text_order'));
-
-			$data['heading_title'] = $this->language->get('text_order');
-
-			$data['text_error'] = $this->language->get('text_error');
-
-			$data['button_continue'] = $this->language->get('button_continue');
-
-			$data['breadcrumbs'] = array();
-
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('text_home'),
-				'href' => $this->url->link('common/home')
-			);
-
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('text_account'),
-				'href' => $this->url->link('account/account', '', 'SSL')
-			);
-
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('heading_title'),
-				'href' => $this->url->link('account/order', '', 'SSL')
-			);
-
-			$data['breadcrumbs'][] = array(
-				'text' => $this->language->get('text_order'),
-				'href' => $this->url->link('account/order/info', 'order_id=' . $order_id, 'SSL')
-			);
-
-			$data['continue'] = $this->url->link('account/order', '', 'SSL');
-
-			$data['column_left'] = $this->load->controller('common/column_left');
-			$data['column_right'] = $this->load->controller('common/column_right');
-			$data['content_top'] = $this->load->controller('common/content_top');
-			$data['content_bottom'] = $this->load->controller('common/content_bottom');
-			$data['footer'] = $this->load->controller('common/footer');
-			$data['header'] = $this->load->controller('common/header');								
-
-			if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/error/not_found.tpl')) {
-				$this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/error/not_found.tpl', $data));
-			} else {
-				$this->response->setOutput($this->load->view('default/template/error/not_found.tpl', $data));
-			}				
+			return new \Opencart\System\Engine\Action('error/not_found');
 		}
+	}
+
+	/**
+	 * History
+	 *
+	 * @return void
+	 */
+	public function history(): void {
+		$this->load->language('account/order');
+
+		$this->response->setOutput($this->getHistory());
+	}
+
+	/**
+	 * Get History
+	 *
+	 * @return string
+	 */
+	public function getHistory(): string {
+		if (isset($this->request->get['order_id'])) {
+			$order_id = (int)$this->request->get['order_id'];
+		} else {
+			$order_id = 0;
+		}
+
+		if (isset($this->request->get['page']) && $this->request->get['route'] == 'account/order.history') {
+			$page = (int)$this->request->get['page'];
+		} else {
+			$page = 1;
+		}
+
+		$limit = 10;
+
+		$data['histories'] = [];
+
+		$this->load->model('account/order');
+
+		$results = $this->model_account_order->getHistories($order_id);
+
+		foreach ($results as $result) {
+			$data['histories'][] = [
+				'status'     => $result['status'],
+				'comment'    => nl2br($result['comment']),
+				'date_added' => date($this->language->get('date_format_short'), strtotime($result['date_added']))
+			];
+		}
+
+		$history_total = $this->model_account_order->getTotalHistories($order_id);
+
+		$data['pagination'] = $this->load->controller('common/pagination', [
+			'total' => $history_total,
+			'page'  => $page,
+			'limit' => $limit,
+			'url'   => $this->url->link('account/order.history', 'customer_token=' . $this->session->data['customer_token'] . '&order_id=' . $order_id . '&page={page}')
+		]);
+
+		$data['results'] = sprintf($this->language->get('text_pagination'), ($history_total) ? (($page - 1) * $limit) + 1 : 0, ((($page - 1) * $limit) > ($history_total - $limit)) ? $history_total : ((($page - 1) * $limit) + $limit), $history_total, ceil($history_total / $limit));
+
+		return $this->load->view('account/order_history', $data);
+	}
+
+	/**
+	 * Reorder
+	 *
+	 * @return void
+	 */
+	public function reorder(): void {
+		$this->load->language('account/order');
+
+		if (isset($this->request->get['order_id'])) {
+			$order_id = (int)$this->request->get['order_id'];
+		} else {
+			$order_id = 0;
+		}
+
+		if (isset($this->request->get['order_product_id'])) {
+			$order_product_id = (int)$this->request->get['order_product_id'];
+		} else {
+			$order_product_id = 0;
+		}
+
+		if (!$this->customer->isLogged() || (!isset($this->request->get['customer_token']) || !isset($this->session->data['customer_token']) || ($this->request->get['customer_token'] != $this->session->data['customer_token']))) {
+			$this->session->data['redirect'] = $this->url->link('account/order', 'language=' . $this->config->get('config_language'));
+
+			$this->response->redirect($this->url->link('account/login', 'language=' . $this->config->get('config_language'), true));
+		}
+
+		$this->load->model('account/order');
+
+		$order_info = $this->model_account_order->getOrder($order_id);
+
+		if ($order_info) {
+			$order_product_info = $this->model_account_order->getProduct($order_id, $order_product_id);
+
+			if ($order_product_info) {
+				$this->load->model('catalog/product');
+
+				$product_info = $this->model_catalog_product->getProduct($order_product_info['product_id']);
+
+				if ($product_info) {
+					$option_data = [];
+
+					$order_options = $this->model_account_order->getOptions($order_product_info['order_id'], $order_product_id);
+
+					foreach ($order_options as $order_option) {
+						if ($order_option['type'] == 'select' || $order_option['type'] == 'radio' || $order_option['type'] == 'image') {
+							$option_data[$order_option['product_option_id']] = $order_option['product_option_value_id'];
+						} elseif ($order_option['type'] == 'checkbox') {
+							$option_data[$order_option['product_option_id']][] = $order_option['product_option_value_id'];
+						} elseif ($order_option['type'] == 'text' || $order_option['type'] == 'textarea' || $order_option['type'] == 'date' || $order_option['type'] == 'datetime' || $order_option['type'] == 'time') {
+							$option_data[$order_option['product_option_id']] = $order_option['value'];
+						} elseif ($order_option['type'] == 'file') {
+							$option_data[$order_option['product_option_id']] = $order_option['value'];
+						}
+					}
+
+					$subscription_info = $this->model_account_order->getSubscription($order_product_info['order_id'], $order_product_id);
+
+					if ($subscription_info) {
+						$subscription_id = $subscription_info['subscription_id'];
+					} else {
+						$subscription_id = 0;
+					}
+
+					$this->cart->add($order_product_info['product_id'], $order_product_info['quantity'], $option_data, $subscription_id);
+
+					$this->session->data['success'] = sprintf($this->language->get('text_success'), $this->url->link('product/product', 'language=' . $this->config->get('config_language') . '&product_id=' . $product_info['product_id']), $product_info['name'], $this->url->link('checkout/cart', 'language=' . $this->config->get('config_language')));
+
+					unset($this->session->data['shipping_method']);
+					unset($this->session->data['shipping_methods']);
+					unset($this->session->data['payment_method']);
+					unset($this->session->data['payment_methods']);
+				} else {
+					$this->session->data['error'] = sprintf($this->language->get('error_reorder'), $order_product_info['name']);
+				}
+			}
+		}
+
+		$this->response->redirect($this->url->link('account/order.info', 'language=' . $this->config->get('config_language') . '&customer_token=' . $this->session->data['customer_token'] . '&order_id=' . $order_id, true));
 	}
 }

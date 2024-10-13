@@ -1,24 +1,25 @@
 CKEDITOR.plugins.add('opencart', {
-	//icons: 'image',
 	init: function(editor) {
 		editor.addCommand('OpenCart', {
 			exec: function(editor) {
+				$('#modal-image').remove();
+
 				$.ajax({
-					url: 'index.php?route=common/filemanager&token=' + getURLVar('token') + '&ckeditor=' + editor.name,
-					dataType: 'html',		
+					url: 'index.php?route=common/filemanager&user_token=' + getURLVar('user_token') + '&ckeditor=' + editor.name,
+					dataType: 'html',
 					success: function(html) {
-						$('body').append('<div id="modal-image" class="modal">' + html + '</div>');
-						
+						$('body').append(html);
+
 						$('#modal-image').modal('show');
 					}
 				});
 			}
 		});
-		
+
 		editor.ui.addButton('OpenCart', {
 			label: 'OpenCart',
-        	command: 'OpenCart',
+			command: 'OpenCart',
 			icon: this.path + 'images/icon.png'
 		});
-    }
+	}
 });
